@@ -3,15 +3,313 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Market Viewer</title>
+    <title>PNG File Viewer</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+        color: #333;
+      }
+      h1 {
+        color: #444;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+      }
+      th,
+      td {
+        padding: 10px;
+        border: 1px solid #ddd;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+      }
+      button {
+        padding: 10px 20px;
+        font-size: 16px;
+        margin-bottom: 20px;
+        cursor: pointer;
+      }
+      .filters,
+      #navigation-buttons {
+        margin-bottom: 20px;
+      }
+      .filter-label {
+        margin-right: 10px;
+      }
+      #image-display {
+        margin-top: 20px;
+        text-align: center;
+      }
+      #first-image {
+        max-width: 80vw; /* Set max width to 80% of the viewport width */
+        display: none;
+      }
+    </style>
   </head>
   <body>
+    <h1>PNG Files Viewer</h1>
+    <button onclick="selectFolder()">Select Folder</button>
 
+    <div class="filters">
+      <label class="filter-label">Year:</label>
+      <select id="yearFilter" onchange="filterTable()"></select>
 
-    <div ">
-      <h1>Welcome to Market Viewer</h1>
-      <p>This is a simple example of a Bootstrap 5 page.</p>
+      <label class="filter-label">Month:</label>
+      <select id="monthFilter" onchange="filterTable()"></select>
+
+      <label class="filter-label">Day:</label>
+      <select id="dayFilter" onchange="filterTable()"></select>
+
+      <label class="filter-label">Day of the Week:</label>
+      <select id="dayOfWeekFilter" onchange="filterTable()"></select>
+
+      <label class="filter-label">Quarter:</label>
+      <select id="quarterFilter" onchange="filterTable()"></select>
+
+      <label class="filter-label">Type:</label>
+      <select id="typeFilter" onchange="filterTable()"></select>
+
+      <label class="filter-label">Sequence:</label>
+      <select id="sequenceFilter" onchange="filterTable()"></select>
     </div>
 
+    <div id="navigation-buttons">
+      <button onclick="showPreviousImage()">Previous</button>
+      <button onclick="showNextImage()">Next</button>
+    </div>
+
+    <table id="file-table">
+      <thead>
+        <tr>
+          <th>File Name</th>
+          <th>Year</th>
+          <th>Month</th>
+          <th>Day</th>
+          <th>Day of the Week</th>
+          <th>Quarter</th>
+          <th>Type</th>
+          <th>Sequence</th>
+        </tr>
+      </thead>
+      <tbody id="file-list">
+        <!-- File data will be inserted here -->
+      </tbody>
+    </table>
+
+    <div id="image-display">
+      <h2>Filtered Image Viewer</h2>
+      <img id="first-image" src="" alt="No image available" />
+    </div>
+
+    <script>
+      const filters = {
+        year: new Set(),
+        month: new Set(),
+        day: new Set(),
+        dayOfWeek: new Set(),
+        quarter: new Set(),
+        type: new Set(),
+        sequence: new Set(),
+      };
+
+      let fileHandles = {}; // Store file handles to access image content
+      let filteredFileNames = []; // List of filtered file names
+      let currentImageIndex = 0; // Index to track current image in filtered list
+
+      async function selectFolder() {
+        try {
+          const directoryHandle = await window.showDirectoryPicker();
+          const tbodyElement = document.getElementById("file-list");
+          tbodyElement.innerHTML = ""; // Clear previous list if any
+          fileHandles = {}; // Reset file handles
+
+          for await (const entry of directoryHandle.values()) {
+            if (entry.kind === "file" && entry.name.endsWith(".png")) {
+              const [year, month, day, dayOfWeek, quarter, type, sequence] =
+                parseFileName(entry.name);
+
+              addToFilters(
+                year,
+                month,
+                day,
+                dayOfWeek,
+                quarter,
+                type,
+                sequence
+              );
+              fileHandles[entry.name] = entry; // Store the file handle
+
+              const row = document.createElement("tr");
+              row.innerHTML = `
+                            <td>${entry.name}</td>
+                            <td>${year}</td>
+                            <td>${month}</td>
+                            <td>${day}</td>
+                            <td>${dayOfWeek}</td>
+                            <td>${quarter}</td>
+                            <td>${type}</td>
+                            <td>${sequence}</td>
+                        `;
+              tbodyElement.appendChild(row);
+            }
+          }
+
+          populateFilterDropdowns();
+          filterTable(); // Automatically load the first image when table loads
+        } catch (error) {
+          console.error("Failed to load directory:", error);
+          document.getElementById("file-list").innerText =
+            "Could not load directory.";
+        }
+      }
+
+      function parseFileName(fileName) {
+        const nameWithoutExtension = fileName.replace(".png", "");
+        const [date, type, sequence] = nameWithoutExtension.split("_");
+        const year = date.substring(0, 4);
+        const month = date.substring(4, 6);
+        const day = date.substring(6, 8);
+        const dayOfWeek = getDayOfWeek(year, month, day);
+        const quarter = getQuarter(month);
+        return [year, month, day, dayOfWeek, quarter, type, sequence];
+      }
+
+      function getQuarter(month) {
+        const monthNumber = parseInt(month, 10);
+        if (monthNumber >= 1 && monthNumber <= 3) return "Q1";
+        if (monthNumber >= 4 && monthNumber <= 6) return "Q2";
+        if (monthNumber >= 7 && monthNumber <= 9) return "Q3";
+        return "Q4";
+      }
+
+      function getDayOfWeek(year, month, day) {
+        const date = new Date(`${year}-${month}-${day}`);
+        const daysOfWeek = [
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday",
+          "Friday",
+          "Saturday",
+        ];
+        return daysOfWeek[date.getDay()];
+      }
+
+      function addToFilters(
+        year,
+        month,
+        day,
+        dayOfWeek,
+        quarter,
+        type,
+        sequence
+      ) {
+        filters.year.add(year);
+        filters.month.add(month);
+        filters.day.add(day);
+        filters.dayOfWeek.add(dayOfWeek);
+        filters.quarter.add(quarter);
+        filters.type.add(type);
+        filters.sequence.add(sequence);
+      }
+
+      function populateFilterDropdowns() {
+        Object.keys(filters).forEach((filterKey) => {
+          const selectElement = document.getElementById(filterKey + "Filter");
+          selectElement.innerHTML = `<option value="">All</option>`;
+          filters[filterKey].forEach((value) => {
+            const option = document.createElement("option");
+            option.value = value;
+            option.text = value;
+            selectElement.appendChild(option);
+          });
+        });
+      }
+
+      function filterTable() {
+        const year = document.getElementById("yearFilter").value;
+        const month = document.getElementById("monthFilter").value;
+        const day = document.getElementById("dayFilter").value;
+        const dayOfWeek = document.getElementById("dayOfWeekFilter").value;
+        const quarter = document.getElementById("quarterFilter").value;
+        const type = document.getElementById("typeFilter").value;
+        const sequence = document.getElementById("sequenceFilter").value;
+
+        const rows = document.querySelectorAll("#file-list tr");
+        filteredFileNames = [];
+
+        rows.forEach((row) => {
+          const [
+            fileName,
+            rowYear,
+            rowMonth,
+            rowDay,
+            rowDayOfWeek,
+            rowQuarter,
+            rowType,
+            rowSequence,
+          ] = Array.from(row.children).map((td) => td.textContent);
+
+          const matches =
+            (!year || rowYear === year) &&
+            (!month || rowMonth === month) &&
+            (!day || rowDay === day) &&
+            (!dayOfWeek || rowDayOfWeek === dayOfWeek) &&
+            (!quarter || rowQuarter === quarter) &&
+            (!type || rowType === type) &&
+            (!sequence || rowSequence === sequence);
+
+          row.style.display = matches ? "" : "none";
+
+          if (matches) {
+            filteredFileNames.push(fileName);
+          }
+        });
+
+        currentImageIndex = 0; // Reset to first image in filtered list
+        if (filteredFileNames.length > 0) {
+          showImage(filteredFileNames[currentImageIndex]);
+        }
+      }
+
+      async function showImage(fileName) {
+        if (fileName && fileHandles[fileName]) {
+          const file = await fileHandles[fileName].getFile();
+          const imageURL = URL.createObjectURL(file);
+
+          const imgElement = document.getElementById("first-image");
+          imgElement.src = imageURL;
+          imgElement.style.display = "block";
+        } else {
+          alert("No image found.");
+        }
+      }
+
+      function showNextImage() {
+        if (filteredFileNames.length > 0) {
+          currentImageIndex =
+            (currentImageIndex + 1) % filteredFileNames.length;
+          showImage(filteredFileNames[currentImageIndex]);
+        } else {
+          alert("No more images in the filtered results.");
+        }
+      }
+
+      function showPreviousImage() {
+        if (filteredFileNames.length > 0) {
+          currentImageIndex =
+            (currentImageIndex - 1 + filteredFileNames.length) %
+            filteredFileNames.length;
+          showImage(filteredFileNames[currentImageIndex]);
+        } else {
+          alert("No more images in the filtered results.");
+        }
+      }
+    </script>
   </body>
 </html>
